@@ -3,7 +3,7 @@
 // si acelerar. No son listos, solo evitan el borde, esquivan cuerpos y buscan
 // la comida más cercana.
 
-import { BOT_AVOID_RADIUS, BOT_LOOKAHEAD, WORLD_RADIUS } from "../shared/constants.js";
+import { BOT_AVOID_RADIUS, BOT_BORDER_MARGIN, BOT_LOOKAHEAD, WORLD_RADIUS } from "../shared/constants.js";
 import type { ComidaVisible } from "../shared/protocol.js";
 import { normalizarAngulo } from "../shared/simulation.js";
 import type { CuadriculaEspacial } from "./spatialGrid.js";
@@ -47,10 +47,13 @@ export class ControladorBots {
     const cabeza = bot.segmentos[0];
     if (!cabeza) return { angulo: bot.angulo, acelerando: false };
 
-    // 1. Cerca del borde: vuelve hacia el centro.
+    // 1. Cerca del borde: vuelve hacia el centro. Muy cerca, sin desvío, para no
+    //    quedarse pegado ni llegar a tocarlo.
     const distanciaCentro = Math.hypot(cabeza.x, cabeza.y);
-    if (distanciaCentro > WORLD_RADIUS - 260) {
-      return { angulo: Math.atan2(-cabeza.y, -cabeza.x) + ruido(), acelerando: false };
+    if (distanciaCentro > WORLD_RADIUS - BOT_BORDER_MARGIN) {
+      const haciaCentro = Math.atan2(-cabeza.y, -cabeza.x);
+      const muyCerca = distanciaCentro > WORLD_RADIUS - BOT_BORDER_MARGIN / 2;
+      return { angulo: muyCerca ? haciaCentro : normalizarAngulo(haciaCentro + ruido()), acelerando: false };
     }
 
     // 2. Esquivar: mira un punto por delante y sus alrededores.

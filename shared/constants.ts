@@ -93,3 +93,6 @@ export const BOT_AVOID_RADIUS = 95;
 
 /** Velocidad del pulso de brillo de la comida. */
 export const FOOD_PULSE_SPEED = 3;
+
+/** Distancia al borde a la que un bot empieza a volver hacia el centro (px). */
+export const BOT_BORDER_MARGIN = 260;
