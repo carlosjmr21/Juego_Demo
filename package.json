@@ -1,0 +1,27 @@
+{
+  "name": "juego-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Clon multijugador de Slither.io para jugar con amigos",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n vite,server -c cyan,magenta \"vite\" \"tsx watch server/index.ts\"",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && vite build && tsc -p tsconfig.server.json",
+    "start": "node dist/server/index.js"
+  },
+  "dependencies": {
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/ws": "^8.18.2",
+    "concurrently": "^10.0.7",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
