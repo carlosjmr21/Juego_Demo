@@ -4,9 +4,10 @@ import { actualizarCamara, crearCamara, mundoAPantalla } from "./camera";
 import type { Entrada } from "./input";
 import { anguloHaciaPuntero, crearEntrada } from "./input";
 import type { Red, SnapshotInterpolado } from "./network";
-import { crearRed, enviarInput, obtenerSnapshot, reaparecer } from "./network";
+import { crearRed, entrar, enviarInput, obtenerSnapshot, reaparecer } from "./network";
 import type { ComidaDibujo, SerpienteDibujo, Vista } from "./renderer";
 import { dibujarMundo } from "./renderer";
+import { crearUi } from "./ui";
 
 // --- Preparar el canvas ---------------------------------------------------
 
@@ -35,78 +36,99 @@ function ajustarCanvas(): void {
 ajustarCanvas();
 window.addEventListener("resize", ajustarCanvas);
 
-// --- Conexión y estado local ----------------------------------------------
+// --- Estado local ---------------------------------------------------------
 
-// Hasta la Fase 4 no hay menú: entramos directamente con un nombre provisional.
-const red: Red = crearRed(`Jugador ${Math.floor(Math.random() * 900 + 100)}`, 0);
 const camara: Camara = crearCamara(0, 0);
 const entrada: Entrada = crearEntrada(canvas, { x: ancho / 2, y: alto / 2 });
+const ui = crearUi();
 
-/** La primera vez que aparece mi serpiente, la cámara salta directo a ella. */
-let camaraCentrada = false;
-/** Último id propio visto, para reencuadrar la cámara al reaparecer. */
+/** Conexión con el servidor; se crea al pulsar Jugar la primera vez. */
+let red: Red | null = null;
+/** Último id propio visto, para reencuadrar la cámara al entrar o reaparecer. */
 let ultimoMiId: string | null = null;
+/** La cámara salta directo a mi serpiente la primera vez que aparece. */
+let camaraCentrada = false;
+/** Si ya se está mostrando la pantalla de muerte. */
+let muerteMostrada = false;
+/** Momento del último refresco del ranking (para no tocar el DOM cada frame). */
+let ultimoRankingMs = 0;
 
-/** Texto del marcador según el estado de la conexión. */
-function textoEstado(snapshot: SnapshotInterpolado | null): string {
-  if (red.estado === "conectando") return "Conectando al servidor…";
-  if (red.estado === "cerrado") return "Desconectado del servidor";
-  if (red.estado === "muerto") return "Muerto";
-  if (!snapshot) return "Esperando al servidor…";
+// --- Interfaz: Jugar, Reintentar y volver al menú -------------------------
 
-  const mia = snapshot.serpientes.find((s) => s.id === red.miId);
-  const longitud = mia ? mia.segmentos.length : 0;
-  return `Longitud: ${longitud}`;
-}
+ui.alJugar(({ nombre, skin }) => {
+  if (!red) red = crearRed(nombre, skin);
+  else entrar(red, nombre, skin);
+
+  ui.ocultarMenu();
+  ui.ocultarMuerte();
+  ui.mostrarRanking();
+  camaraCentrada = false;
+  muerteMostrada = false;
+});
+
+ui.alReintentar(() => {
+  if (!red) return;
+  reaparecer(red);
+  ui.ocultarMuerte();
+  ui.mostrarRanking();
+  camaraCentrada = false;
+  muerteMostrada = false;
+});
+
+ui.alMenu(() => {
+  ui.ocultarMuerte();
+  ui.ocultarRanking();
+  ui.mostrarMenu();
+});
+
+// --- Dibujo ---------------------------------------------------------------
 
 /** Convierte el snapshot interpolado a lo que sabe dibujar el renderizador. */
-function aMundo(snapshot: SnapshotInterpolado): { serpientes: SerpienteDibujo[]; comida: ComidaDibujo[] } {
+function aMundo(snapshot: SnapshotInterpolado, miId: string | null): { serpientes: SerpienteDibujo[]; comida: ComidaDibujo[] } {
   const serpientes: SerpienteDibujo[] = snapshot.serpientes.map((s) => ({
+    id: s.id,
+    nombre: s.nombre,
     segmentos: s.segmentos,
     skin: s.skin,
+    esMia: s.id === miId,
   }));
   const comida: ComidaDibujo[] = snapshot.comida.map((c) => ({ id: c.id, x: c.x, y: c.y, valor: c.valor }));
   return { serpientes, comida };
 }
 
-/** Dibuja el aviso de muerte encima del mundo. */
-function dibujarAvisoMuerte(): void {
-  contexto.fillStyle = "rgba(11, 16, 32, 0.6)";
-  contexto.fillRect(0, 0, ancho, alto);
-
-  contexto.fillStyle = "#f87171";
-  contexto.font = "700 40px system-ui, sans-serif";
-  contexto.textAlign = "center";
-  contexto.textBaseline = "middle";
-  contexto.fillText("Has muerto", ancho / 2, alto / 2 - 30);
-
-  contexto.fillStyle = "#e2e8f0";
-  contexto.font = "20px system-ui, sans-serif";
-  contexto.fillText(`Puntuación: ${red.puntuacionFinal}`, ancho / 2, alto / 2 + 20);
-  contexto.fillStyle = "#94a3b8";
-  contexto.font = "16px system-ui, sans-serif";
-  contexto.fillText("Haz clic o pulsa Enter para volver a jugar", ancho / 2, alto / 2 + 60);
+/** Prepara el canvas y devuelve la vista lista para dibujar. */
+function prepararVista(): Vista {
+  const dpr = window.devicePixelRatio || 1;
+  contexto.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx: contexto, camara, ancho, alto };
 }
 
-// Al morir, un clic o Enter pide una serpiente nueva.
-canvas.addEventListener("click", () => reaparecer(red));
-window.addEventListener("keydown", (evento) => {
-  if (evento.code === "Enter") reaparecer(red);
-});
+/** Texto del marcador mientras se juega. */
+function textoLongitud(snapshot: SnapshotInterpolado | null): string {
+  if (!red) return "";
+  if (red.estado === "conectando") return "Conectando al servidor…";
+  if (red.estado === "cerrado") return "Desconectado del servidor";
+  if (!snapshot) return "Esperando al servidor…";
 
-/** Bucle principal: interpola lo recibido, envía input y dibuja. */
+  const mia = snapshot.serpientes.find((s) => s.id === red?.miId);
+  return `Longitud: ${mia ? mia.segmentos.length : 0}`;
+}
+
+// --- Bucle principal ------------------------------------------------------
+
 let ultimoTiempo = performance.now();
 function bucle(tiempo: number): void {
   const dt = Math.min((tiempo - ultimoTiempo) / 1000, 0.05);
   ultimoTiempo = tiempo;
 
-  const snapshot = obtenerSnapshot(red, tiempo);
+  const vista = prepararVista();
+  const snapshot = red ? obtenerSnapshot(red, tiempo) : null;
 
-  if (snapshot) {
-    const mia = snapshot.serpientes.find((s) => s.id === red.miId);
+  if (red && snapshot) {
+    const mia = snapshot.serpientes.find((s) => s.id === red?.miId);
     const cabeza = mia?.segmentos[0];
 
-    // Al reaparecer (nuevo id), la cámara salta de nuevo a mi serpiente.
+    // Al entrar o reaparecer (id nuevo), la cámara salta a mi serpiente.
     if (red.miId !== ultimoMiId) {
       ultimoMiId = red.miId;
       camaraCentrada = false;
@@ -120,36 +142,37 @@ function bucle(tiempo: number): void {
       }
       actualizarCamara(camara, cabeza, dt);
 
-      // El ángulo se calcula desde la cabeza (en pantalla) hacia el puntero.
       const cabezaPantalla = mundoAPantalla(camara, ancho, alto, cabeza);
       const angulo = anguloHaciaPuntero(cabezaPantalla, entrada.puntero);
       enviarInput(red, angulo, entrada.acelerando);
     }
 
-    const dpr = window.devicePixelRatio || 1;
-    contexto.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const vista: Vista = { ctx: contexto, camara, ancho, alto };
-    dibujarMundo(vista, aMundo(snapshot));
+    dibujarMundo(vista, aMundo(snapshot, red.miId));
 
-    if (red.estado === "muerto") {
-      dibujarAvisoMuerte();
-    } else {
+    // Ranking: se refresca sin abusar del DOM.
+    if (tiempo - ultimoRankingMs > 200) {
+      ultimoRankingMs = tiempo;
+      ui.actualizarRanking(snapshot.ranking, red.miId);
+    }
+
+    // Pantalla de muerte: se muestra una vez por muerte.
+    if (red.estado === "muerto" && !muerteMostrada) {
+      ui.mostrarMuerte(red.puntuacionFinal);
+      muerteMostrada = true;
+    }
+    if (red.estado !== "muerto") muerteMostrada = false;
+
+    // HUD de longitud (solo si no estamos en la pantalla de muerte).
+    if (red.estado !== "muerto") {
       contexto.fillStyle = "#e2e8f0";
       contexto.font = "600 16px system-ui, sans-serif";
       contexto.textAlign = "left";
       contexto.textBaseline = "top";
-      contexto.fillText(textoEstado(snapshot), 16, 16);
+      contexto.fillText(textoLongitud(snapshot), 16, 16);
     }
   } else {
-    const dpr = window.devicePixelRatio || 1;
-    contexto.setTransform(dpr, 0, 0, dpr, 0, 0);
-    contexto.fillStyle = "#0b1020";
-    contexto.fillRect(0, 0, ancho, alto);
-    contexto.fillStyle = "#94a3b8";
-    contexto.font = "16px system-ui, sans-serif";
-    contexto.textAlign = "center";
-    contexto.textBaseline = "middle";
-    contexto.fillText(textoEstado(null), ancho / 2, alto / 2);
+    // Menú, espera o desconexión: fondo con el mapa vacío.
+    dibujarMundo(vista, { serpientes: [], comida: [] });
   }
 
   requestAnimationFrame(bucle);

@@ -78,7 +78,7 @@ export function crearRed(nombre: string, skin: number): Red {
   };
 
   socket.addEventListener("open", () => {
-    enviar(red, { t: "join", nombre, skin });
+    entrar(red, nombre, skin);
   });
 
   socket.addEventListener("close", () => {
@@ -153,12 +153,19 @@ export function enviarInput(red: Red, angulo: number, acelerando: boolean): void
   enviar(red, { t: "input", angulo, acelerando });
 }
 
+/** Entra (o vuelve a entrar) al juego con un nombre y una skin. */
+export function entrar(red: Red, nombre: string, skin: number): void {
+  red.nombre = nombre;
+  red.skin = skin;
+  red.estado = "conectando";
+  red.ultimoAngulo = Number.NaN; // el próximo input se envía seguro
+  enviar(red, { t: "join", nombre, skin });
+}
+
 /** Pide al servidor una serpiente nueva tras morir. */
 export function reaparecer(red: Red): void {
   if (red.estado !== "muerto") return;
-  red.estado = "conectando";
-  red.ultimoAngulo = Number.NaN; // el próximo input se envía seguro
-  enviar(red, { t: "join", nombre: red.nombre, skin: red.skin });
+  entrar(red, red.nombre, red.skin);
 }
 
 /** Interpola los segmentos de una serpiente entre dos snapshots. */

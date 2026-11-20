@@ -18,3 +18,191 @@ body {
   height: 100vh;
   touch-action: none;
 }
+
+/* --- Interfaz sobre el canvas ------------------------------------------- */
+
+#ui {
+  position: fixed;
+  inset: 0;
+  pointer-events: none; /* los clics pasan al canvas salvo en los paneles */
+}
+
+.panel {
+  pointer-events: auto;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  border-radius: 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  padding: 22px 26px;
+}
+
+.centrado {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 380px);
+  text-align: center;
+}
+
+.oculto {
+  display: none !important;
+}
+
+h1 {
+  margin: 0;
+  font-size: 30px;
+  letter-spacing: 0.5px;
+  color: #a78bfa;
+}
+
+h2 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  color: #f87171;
+}
+
+h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #94a3b8;
+}
+
+.subtitulo {
+  margin: 4px 0 20px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.campo {
+  display: block;
+  text-align: left;
+  margin-bottom: 16px;
+}
+
+.campo > span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+#entrada-nombre {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 16px;
+  color: #e2e8f0;
+  background: #0b1020;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  outline: none;
+}
+
+#entrada-nombre:focus {
+  border-color: #8b5cf6;
+}
+
+.skins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.skin {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.skin.elegida {
+  border-color: #e2e8f0;
+  transform: scale(1.12);
+}
+
+.boton {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0b1020;
+  background: #a78bfa;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.boton:hover {
+  background: #c4b5fd;
+}
+
+.boton.secundario {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid #334155;
+}
+
+.ayuda {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.puntuacion {
+  margin: 0 0 18px;
+  font-size: 16px;
+}
+
+.puntuacion span {
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+/* --- Ranking ------------------------------------------------------------- */
+
+.ranking {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 190px;
+  padding: 14px 16px;
+}
+
+#lista-ranking {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: puesto;
+}
+
+#lista-ranking li {
+  counter-increment: puesto;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+#lista-ranking li::before {
+  content: counter(puesto);
+  color: #64748b;
+  min-width: 16px;
+}
+
+#lista-ranking li.yo {
+  color: #fde68a;
+  font-weight: 700;
+}
+
+#lista-ranking li span {
+  color: inherit;
+}

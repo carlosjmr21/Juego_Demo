@@ -22,8 +22,12 @@ export interface Vista {
 
 /** Una serpiente lista para dibujar (ya interpolada por la red). */
 export interface SerpienteDibujo {
+  id: string;
+  nombre: string;
   segmentos: Punto[];
   skin: number;
+  /** ¿Es la serpiente del jugador? (se resalta su nombre) */
+  esMia: boolean;
 }
 
 export interface ComidaDibujo {
@@ -186,6 +190,29 @@ export function dibujarSerpiente(vista: Vista, serpiente: SerpienteDibujo): void
   }
 
   dibujarOjos(vista, serpiente.segmentos[0], angulo, radio);
+  dibujarNombre(vista, serpiente, radio);
+}
+
+/** Dibuja el nombre del jugador encima de la cabeza. */
+function dibujarNombre(vista: Vista, serpiente: SerpienteDibujo, radio: number): void {
+  const cabeza = serpiente.segmentos[0];
+  if (!cabeza || serpiente.nombre.length === 0) return;
+
+  const { ctx, camara, ancho, alto } = vista;
+  const centro = mundoAPantalla(camara, ancho, alto, cabeza);
+
+  ctx.save();
+  ctx.font = "600 13px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(11, 16, 32, 0.85)";
+  ctx.fillStyle = serpiente.esMia ? "#fde68a" : "#e2e8f0";
+
+  const y = centro.y - radio - 6;
+  ctx.strokeText(serpiente.nombre, centro.x, y);
+  ctx.fillText(serpiente.nombre, centro.x, y);
+  ctx.restore();
 }
 
 /** Dibuja los dos ojos de la cabeza, orientados según la dirección. */

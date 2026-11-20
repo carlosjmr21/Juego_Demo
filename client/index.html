@@ -7,6 +7,40 @@
   </head>
   <body>
     <canvas id="game"></canvas>
+
+    <!-- Interfaz: menús HTML posicionados encima del canvas. -->
+    <div id="ui">
+      <div id="ranking" class="panel ranking oculto">
+        <h3>Ranking</h3>
+        <ol id="lista-ranking"></ol>
+      </div>
+
+      <div id="menu" class="panel centrado">
+        <h1>Juego_clone</h1>
+        <p class="subtitulo">Clon de Slither.io</p>
+
+        <label class="campo">
+          <span>Nombre</span>
+          <input id="entrada-nombre" type="text" maxlength="16" autocomplete="off" spellcheck="false" />
+        </label>
+
+        <div class="campo">
+          <span>Skin</span>
+          <div id="skins" class="skins"></div>
+        </div>
+
+        <button id="boton-jugar" class="boton">Jugar</button>
+        <p class="ayuda">Mouse o dedo para girar · clic, espacio o dos dedos para acelerar</p>
+      </div>
+
+      <div id="muerte" class="panel centrado oculto">
+        <h2>Has muerto</h2>
+        <p class="puntuacion">Puntuación: <span id="puntuacion-final">0</span></p>
+        <button id="boton-reintentar" class="boton">Reintentar</button>
+        <button id="boton-menu" class="boton secundario">Cambiar nombre o skin</button>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
