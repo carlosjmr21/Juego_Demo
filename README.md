@@ -67,7 +67,7 @@ Abre la dirección que muestra Vite (normalmente `http://localhost:5173`).
 Proyecto en construcción, organizado en fases:
 
 - [x] Fase 0 — Estructura del proyecto, servidor y conexión WebSocket
-- [ ] Fase 1 — Una serpiente jugable en local
+- [x] Fase 1 — Una serpiente jugable en local
 - [ ] Fase 2 — Lógica de movimiento y comida en el servidor
 - [ ] Fase 3 — Colisiones, muerte y aceleración
 - [ ] Fase 4 — Interfaz: menú, ranking y skins
