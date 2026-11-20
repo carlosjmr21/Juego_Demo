@@ -1,9 +1,9 @@
 import { FOOD_RADIUS, HEX_SIZE, WORLD_RADIUS } from "../../shared/constants";
+import type { Punto } from "../../shared/protocol";
+import { radioPorLongitud } from "../../shared/simulation";
 import { obtenerSkin } from "../../shared/skins";
 import type { Camara } from "./camera";
 import { mundoAPantalla } from "./camera";
-import type { ComidaLocal, EstadoMundo, SerpienteLocal } from "./state";
-import { radioSerpiente } from "./state";
 
 /** Todo el dibujo del juego en Canvas 2D. Nada de imágenes: solo formas. */
 
@@ -11,11 +11,44 @@ const COLOR_FONDO = "#0b1020";
 const COLOR_BORDE = "#8b5cf6";
 const COLOR_CUADRICULA = "rgba(148, 163, 184, 0.07)";
 
+const COLORES_COMIDA = ["#facc15", "#fb923c", "#4ade80", "#38bdf8", "#f472b6", "#a78bfa"];
+
 export interface Vista {
   ctx: CanvasRenderingContext2D;
   camara: Camara;
   ancho: number;
   alto: number;
+}
+
+/** Una serpiente lista para dibujar (ya interpolada por la red). */
+export interface SerpienteDibujo {
+  segmentos: Punto[];
+  skin: number;
+}
+
+export interface ComidaDibujo {
+  id: number;
+  x: number;
+  y: number;
+}
+
+export interface Mundo {
+  serpientes: SerpienteDibujo[];
+  comida: ComidaDibujo[];
+}
+
+/** Color de una comida, derivado de su id (el servidor solo manda posiciones). */
+function colorComida(id: number): string {
+  const indice = ((id % COLORES_COMIDA.length) + COLORES_COMIDA.length) % COLORES_COMIDA.length;
+  return COLORES_COMIDA[indice] ?? "#facc15";
+}
+
+/** Ángulo de la cabeza a partir de los dos primeros segmentos. */
+function anguloDe(segmentos: Punto[]): number {
+  const cabeza = segmentos[0];
+  const cuello = segmentos[1] ?? segmentos[0];
+  if (!cabeza || !cuello) return 0;
+  return Math.atan2(cabeza.y - cuello.y, cabeza.x - cuello.x);
 }
 
 /** Limpia la pantalla con el color de fondo. */
@@ -48,9 +81,10 @@ export function dibujarCuadricula(vista: Vista): void {
   for (let fila = filaInicial; fila <= filaFinal; fila++) {
     const desplazamiento = fila % 2 === 0 ? 0 : anchoHex / 2;
     for (let col = colInicial; col <= colFinal; col++) {
-      const centroMundoX = col * anchoHex + desplazamiento;
-      const centroMundoY = fila * pasoY;
-      const centro = mundoAPantalla(camara, ancho, alto, { x: centroMundoX, y: centroMundoY });
+      const centro = mundoAPantalla(camara, ancho, alto, {
+        x: col * anchoHex + desplazamiento,
+        y: fila * pasoY,
+      });
 
       for (let lado = 0; lado < 6; lado++) {
         const angulo = (Math.PI / 3) * lado;
@@ -83,7 +117,7 @@ export function dibujarBorde(vista: Vista): void {
 }
 
 /** Dibuja la comida visible (círculos de colores con un halo suave). */
-export function dibujarComida(vista: Vista, comida: ComidaLocal[]): void {
+export function dibujarComida(vista: Vista, comida: ComidaDibujo[]): void {
   const { ctx, camara, ancho, alto } = vista;
   const margen = FOOD_RADIUS * 4;
 
@@ -98,9 +132,10 @@ export function dibujarComida(vista: Vista, comida: ComidaLocal[]): void {
       continue;
     }
 
+    const color = colorComida(punto.id);
     ctx.save();
-    ctx.fillStyle = punto.color;
-    ctx.shadowColor = punto.color;
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
     ctx.shadowBlur = 12;
     ctx.beginPath();
     ctx.arc(pantalla.x, pantalla.y, FOOD_RADIUS, 0, Math.PI * 2);
@@ -110,10 +145,11 @@ export function dibujarComida(vista: Vista, comida: ComidaLocal[]): void {
 }
 
 /** Dibuja una serpiente: cuerpo con degradado por segmento y ojos en la cabeza. */
-export function dibujarSerpiente(vista: Vista, serpiente: SerpienteLocal): void {
+export function dibujarSerpiente(vista: Vista, serpiente: SerpienteDibujo): void {
   const { ctx, camara, ancho, alto } = vista;
   const skin = obtenerSkin(serpiente.skin);
-  const radio = radioSerpiente(serpiente);
+  const radio = radioPorLongitud(serpiente.segmentos.length);
+  const angulo = anguloDe(serpiente.segmentos);
 
   // Del final hacia la cabeza para que la cabeza quede encima.
   for (let i = serpiente.segmentos.length - 1; i >= 0; i--) {
@@ -145,18 +181,17 @@ export function dibujarSerpiente(vista: Vista, serpiente: SerpienteLocal): void 
     ctx.fill();
   }
 
-  dibujarOjos(vista, serpiente, radio);
+  dibujarOjos(vista, serpiente.segmentos[0], angulo, radio);
 }
 
 /** Dibuja los dos ojos de la cabeza, orientados según la dirección. */
-function dibujarOjos(vista: Vista, serpiente: SerpienteLocal, radio: number): void {
-  const { ctx, camara, ancho, alto } = vista;
-  const cabeza = serpiente.segmentos[0];
+function dibujarOjos(vista: Vista, cabeza: Punto | undefined, angulo: number, radio: number): void {
   if (!cabeza) return;
 
+  const { ctx, camara, ancho, alto } = vista;
   const centro = mundoAPantalla(camara, ancho, alto, cabeza);
-  const dirX = Math.cos(serpiente.angulo);
-  const dirY = Math.sin(serpiente.angulo);
+  const dirX = Math.cos(angulo);
+  const dirY = Math.sin(angulo);
   const perpX = -dirY;
   const perpY = dirX;
 
@@ -181,11 +216,11 @@ function dibujarOjos(vista: Vista, serpiente: SerpienteLocal, radio: number): vo
   }
 }
 
-/** Dibuja el mundo completo en el orden correcto (fondo, borde, comida, serpiente). */
-export function dibujarMundo(vista: Vista, estado: EstadoMundo): void {
+/** Dibuja el mundo completo en el orden correcto. */
+export function dibujarMundo(vista: Vista, mundo: Mundo): void {
   limpiar(vista.ctx, vista.ancho, vista.alto);
   dibujarCuadricula(vista);
   dibujarBorde(vista);
-  dibujarComida(vista, estado.comida);
-  dibujarSerpiente(vista, estado.serpiente);
+  dibujarComida(vista, mundo.comida);
+  for (const serpiente of mundo.serpientes) dibujarSerpiente(vista, serpiente);
 }

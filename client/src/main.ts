@@ -1,13 +1,12 @@
 import "./style.css";
-import type { MensajeServidor } from "../../shared/protocol";
 import type { Camara } from "./camera";
 import { actualizarCamara, crearCamara, mundoAPantalla } from "./camera";
 import type { Entrada } from "./input";
 import { anguloHaciaPuntero, crearEntrada } from "./input";
-import type { Vista } from "./renderer";
+import type { Red, SnapshotInterpolado } from "./network";
+import { crearRed, enviarInput, obtenerSnapshot } from "./network";
+import type { ComidaDibujo, SerpienteDibujo, Vista } from "./renderer";
 import { dibujarMundo } from "./renderer";
-import type { EstadoMundo } from "./state";
-import { avanzarSerpiente, comer, crearMundo, girarHacia, limitarAlMapa, puntuacion } from "./state";
 
 // --- Preparar el canvas ---------------------------------------------------
 
@@ -36,83 +35,86 @@ function ajustarCanvas(): void {
 ajustarCanvas();
 window.addEventListener("resize", ajustarCanvas);
 
-// --- Estado del juego -----------------------------------------------------
+// --- Conexión y estado local ----------------------------------------------
 
-// La serpiente nace en el centro del mapa (0, 0).
-const estado: EstadoMundo = crearMundo();
+// Hasta la Fase 4 no hay menú: entramos directamente con un nombre provisional.
+const red: Red = crearRed(`Jugador ${Math.floor(Math.random() * 900 + 100)}`, 0);
 const camara: Camara = crearCamara(0, 0);
 const entrada: Entrada = crearEntrada(canvas, { x: ancho / 2, y: alto / 2 });
 
-/** Avanza un paso de simulación (provisional, todavía en el cliente). */
-function actualizar(dt: number): void {
-  const cabeza = estado.serpiente.segmentos[0];
-  if (!cabeza) return;
+/** La primera vez que aparece mi serpiente, la cámara salta directo a ella. */
+let camaraCentrada = false;
 
-  const cabezaPantalla = mundoAPantalla(camara, ancho, alto, cabeza);
-  const objetivo = anguloHaciaPuntero(cabezaPantalla, entrada.puntero);
+/** Texto del marcador según el estado de la conexión. */
+function textoEstado(snapshot: SnapshotInterpolado | null): string {
+  if (red.estado === "conectando") return "Conectando al servidor…";
+  if (red.estado === "cerrado") return "Desconectado del servidor";
+  if (!snapshot) return "Esperando al servidor…";
 
-  girarHacia(estado.serpiente, objetivo, dt);
-  avanzarSerpiente(estado.serpiente, dt);
-  limitarAlMapa(estado.serpiente);
-  comer(estado);
-
-  const nuevaCabeza = estado.serpiente.segmentos[0] ?? cabeza;
-  actualizarCamara(camara, nuevaCabeza, dt);
+  const mia = snapshot.serpientes.find((s) => s.id === red.miId);
+  const longitud = mia ? mia.segmentos.length : 0;
+  return `Longitud: ${longitud}`;
 }
 
-/** Dibuja el mundo y el marcador de puntuación. */
-function dibujar(): void {
-  const dpr = window.devicePixelRatio || 1;
-  contexto.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-  const vista: Vista = { ctx: contexto, camara, ancho, alto };
-  dibujarMundo(vista, estado);
-
-  contexto.fillStyle = "#e2e8f0";
-  contexto.font = "600 16px system-ui, sans-serif";
-  contexto.textAlign = "left";
-  contexto.textBaseline = "top";
-  contexto.fillText(`Longitud: ${puntuacion(estado.serpiente)}`, 16, 16);
+/** Convierte el snapshot interpolado a lo que sabe dibujar el renderizador. */
+function aMundo(snapshot: SnapshotInterpolado): { serpientes: SerpienteDibujo[]; comida: ComidaDibujo[] } {
+  const serpientes: SerpienteDibujo[] = snapshot.serpientes.map((s) => ({
+    segmentos: s.segmentos,
+    skin: s.skin,
+  }));
+  const comida: ComidaDibujo[] = snapshot.comida.map((c) => ({ id: c.id, x: c.x, y: c.y }));
+  return { serpientes, comida };
 }
 
-/** Bucle principal: simula y dibuja a la tasa de refresco de la pantalla. */
+/** Bucle principal: interpola lo recibido, envía input y dibuja. */
 let ultimoTiempo = performance.now();
 function bucle(tiempo: number): void {
   const dt = Math.min((tiempo - ultimoTiempo) / 1000, 0.05);
   ultimoTiempo = tiempo;
 
-  actualizar(dt);
-  dibujar();
+  const snapshot = obtenerSnapshot(red, tiempo);
+
+  if (snapshot) {
+    const mia = snapshot.serpientes.find((s) => s.id === red.miId);
+    const cabeza = mia?.segmentos[0];
+
+    if (cabeza) {
+      if (!camaraCentrada) {
+        camara.x = cabeza.x;
+        camara.y = cabeza.y;
+        camaraCentrada = true;
+      }
+      actualizarCamara(camara, cabeza, dt);
+
+      // El ángulo se calcula desde la cabeza (en pantalla) hacia el puntero.
+      const cabezaPantalla = mundoAPantalla(camara, ancho, alto, cabeza);
+      const angulo = anguloHaciaPuntero(cabezaPantalla, entrada.puntero);
+      enviarInput(red, angulo, false);
+    }
+
+    const dpr = window.devicePixelRatio || 1;
+    contexto.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const vista: Vista = { ctx: contexto, camara, ancho, alto };
+    dibujarMundo(vista, aMundo(snapshot));
+
+    contexto.fillStyle = "#e2e8f0";
+    contexto.font = "600 16px system-ui, sans-serif";
+    contexto.textAlign = "left";
+    contexto.textBaseline = "top";
+    contexto.fillText(textoEstado(snapshot), 16, 16);
+  } else {
+    const dpr = window.devicePixelRatio || 1;
+    contexto.setTransform(dpr, 0, 0, dpr, 0, 0);
+    contexto.fillStyle = "#0b1020";
+    contexto.fillRect(0, 0, ancho, alto);
+    contexto.fillStyle = "#94a3b8";
+    contexto.font = "16px system-ui, sans-serif";
+    contexto.textAlign = "center";
+    contexto.textBaseline = "middle";
+    contexto.fillText(textoEstado(null), ancho / 2, alto / 2);
+  }
+
   requestAnimationFrame(bucle);
 }
 
 requestAnimationFrame(bucle);
-
-// --- Conexión con el servidor (de la Fase 0) ------------------------------
-
-/** URL del WebSocket usando el mismo host del que se cargó la página. */
-function urlSocket(): string {
-  const protocolo = location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocolo}//${location.host}/ws`;
-}
-
-const socket = new WebSocket(urlSocket());
-
-socket.addEventListener("open", () => console.log("Conectado al servidor"));
-socket.addEventListener("close", () => console.warn("Desconectado del servidor"));
-socket.addEventListener("error", () => console.error("Error de conexión con el servidor"));
-
-socket.addEventListener("message", (evento) => {
-  let mensaje: MensajeServidor;
-
-  try {
-    mensaje = JSON.parse(String(evento.data)) as MensajeServidor;
-  } catch {
-    console.warn("Mensaje inválido del servidor:", evento.data);
-    return;
-  }
-
-  if (mensaje.t === "welcome") {
-    console.log(`Bienvenido. Tu id: ${mensaje.id} (${mensaje.tickRate} ticks/s)`);
-  }
-});

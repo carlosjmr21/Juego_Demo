@@ -3,9 +3,12 @@ import { readFile, stat } from "node:fs/promises";
 import { createServer, type ServerResponse } from "node:http";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { WebSocketServer } from "ws";
-import { TICK_RATE, WORLD_RADIUS } from "../shared/constants.js";
-import type { MensajeServidor } from "../shared/protocol.js";
+import { WebSocket, WebSocketServer } from "ws";
+import { MAX_NAME_LENGTH, TICK_RATE, WORLD_RADIUS } from "../shared/constants.js";
+import type { MensajeCliente, MensajeServidor } from "../shared/protocol.js";
+import { esSkinValida } from "../shared/skins.js";
+import { Juego } from "./game.js";
+import { aplicarInput } from "./snake.js";
 
 // Render asigna el puerto; en local usamos 3000.
 const PUERTO = Number(process.env.PORT ?? 3000);
@@ -75,6 +78,32 @@ const servidor = createServer((req, res) => {
   void servirEstatico(pathname, res);
 });
 
+// --- Juego -----------------------------------------------------------------
+
+const juego = new Juego();
+
+/** Un socket conectado. `id` es null hasta que hace `join`. */
+interface Conexion {
+  id: string | null;
+}
+
+const conexiones = new Map<WebSocket, Conexion>();
+
+/** Valida y recorta el nombre del jugador. */
+function validarNombre(valor: unknown): string {
+  if (typeof valor !== "string") return "Anónimo";
+  const limpio = valor.trim().slice(0, MAX_NAME_LENGTH);
+  return limpio.length > 0 ? limpio : "Anónimo";
+}
+
+// Cada tick, un único JSON para todos los clientes ya unidos.
+juego.iniciar((snapshot) => {
+  const texto = JSON.stringify(snapshot);
+  for (const [ws, conexion] of conexiones) {
+    if (conexion.id && ws.readyState === WebSocket.OPEN) ws.send(texto);
+  }
+});
+
 const wss = new WebSocketServer({ noServer: true });
 
 // Solo aceptamos WebSockets en /ws; cualquier otra ruta se rechaza.
@@ -90,24 +119,63 @@ servidor.on("upgrade", (req, socket, head) => {
 });
 
 wss.on("connection", (ws) => {
-  const id = randomUUID();
-  console.log(`[ws] jugador conectado: ${id}`);
-
-  const bienvenida: MensajeServidor = {
-    t: "welcome",
-    id,
-    radioMapa: WORLD_RADIUS,
-    tickRate: TICK_RATE,
-  };
-  ws.send(JSON.stringify(bienvenida));
+  const conexion: Conexion = { id: null };
+  conexiones.set(ws, conexion);
 
   ws.on("message", (datos) => {
-    // En la Fase 0 solo registramos lo que llega; el juego empieza en la Fase 2.
-    console.log(`[ws] mensaje de ${id}: ${datos.toString()}`);
+    let mensaje: MensajeCliente;
+
+    try {
+      mensaje = JSON.parse(datos.toString()) as MensajeCliente;
+    } catch {
+      console.warn("[ws] mensaje que no es JSON válido");
+      return;
+    }
+
+    if (mensaje.t === "join") {
+      if (conexion.id) return; // ya estaba dentro
+
+      const nombre = validarNombre(mensaje.nombre);
+      const skin = esSkinValida(mensaje.skin) ? mensaje.skin : 0;
+      const id = randomUUID();
+
+      juego.agregarJugador(id, nombre, skin);
+      conexion.id = id;
+
+      const bienvenida: MensajeServidor = {
+        t: "welcome",
+        id,
+        radioMapa: WORLD_RADIUS,
+        tickRate: TICK_RATE,
+      };
+      ws.send(JSON.stringify(bienvenida));
+
+      console.log(`[ws] entró ${nombre} (${id.slice(0, 8)}); en el mapa: ${juego.cantidadSerpientes}`);
+      return;
+    }
+
+    if (mensaje.t === "input") {
+      if (!conexion.id) return; // todavía no ha entrado
+
+      const serpiente = juego.obtener(conexion.id);
+      if (!serpiente) return;
+
+      // Validación: el ángulo tiene que ser un número real.
+      if (typeof mensaje.angulo !== "number" || !Number.isFinite(mensaje.angulo)) return;
+
+      aplicarInput(serpiente, mensaje.angulo, mensaje.acelerando === true);
+    }
   });
 
-  ws.on("close", () => console.log(`[ws] jugador desconectado: ${id}`));
-  ws.on("error", (error) => console.error(`[ws] error con ${id}:`, error));
+  ws.on("close", () => {
+    if (conexion.id) {
+      juego.quitarJugador(conexion.id);
+      console.log(`[ws] salió ${conexion.id.slice(0, 8)}; en el mapa: ${juego.cantidadSerpientes}`);
+    }
+    conexiones.delete(ws);
+  });
+
+  ws.on("error", (error) => console.error("[ws] error:", error));
 });
 
 servidor.listen(PUERTO, () => {

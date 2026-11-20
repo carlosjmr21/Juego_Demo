@@ -45,6 +45,9 @@ export const FOOD_RADIUS = 5;
 /** Radio del área de visión de cada jugador (px). */
 export const VIEW_RADIUS = 900;
 
+/** Retraso con el que el cliente dibuja respecto al servidor, para interpolar (ms). */
+export const INTERPOLATION_DELAY_MS = 100;
+
 /** Lado de cada hexágono del fondo (px). */
 export const HEX_SIZE = 46;
 
