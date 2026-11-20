@@ -30,6 +30,8 @@ export interface ComidaDibujo {
   id: number;
   x: number;
   y: number;
+  /** Cuánto alimenta: las de restos se dibujan más grandes y brillantes. */
+  valor: number;
 }
 
 export interface Mundo {
@@ -133,12 +135,14 @@ export function dibujarComida(vista: Vista, comida: ComidaDibujo[]): void {
     }
 
     const color = colorComida(punto.id);
+    const radio = FOOD_RADIUS * (1 + Math.max(0, punto.valor - 1) * 0.4);
+
     ctx.save();
     ctx.fillStyle = color;
     ctx.shadowColor = color;
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 12 + Math.max(0, punto.valor - 1) * 6;
     ctx.beginPath();
-    ctx.arc(pantalla.x, pantalla.y, FOOD_RADIUS, 0, Math.PI * 2);
+    ctx.arc(pantalla.x, pantalla.y, radio, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }

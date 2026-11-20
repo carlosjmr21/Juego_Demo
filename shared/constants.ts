@@ -53,3 +53,23 @@ export const HEX_SIZE = 46;
 
 /** Cuánto tarda la cámara en alcanzar a la cabeza (menor = más pegada). */
 export const CAMERA_SMOOTHING = 0.0006;
+
+// --- Fase 3: colisiones, muerte y aceleración ----------------------------
+
+/** Longitud mínima (en segmentos) para poder acelerar. */
+export const SNAKE_MIN_BOOST_LENGTH = 12;
+
+/** Longitud que se pierde por segundo mientras se acelera (segmentos/s). */
+export const BOOST_LENGTH_COST = 4;
+
+/** Cuánto alimenta una comida normal. */
+export const FOOD_VALUE = 1;
+
+/** Cuánto alimenta cada trozo del cuerpo de una serpiente muerta. */
+export const DEATH_FOOD_VALUE = 3;
+
+/** Convierte uno de cada N segmentos del cuerpo en comida al morir. */
+export const DEATH_SEGMENTS_PER_FOOD = 2;
+
+/** Lado de cada celda de la cuadrícula espacial de colisiones (px). */
+export const SPATIAL_CELL_SIZE = 64;

@@ -84,7 +84,10 @@ const juego = new Juego();
 
 /** Un socket conectado. `id` es null hasta que hace `join`. */
 interface Conexion {
-  id: string | null;
+  /** Ya hizo join alguna vez (recibe snapshots aunque esté muerto). */
+  entrado: boolean;
+  /** Serpiente viva; null mientras está muerto o antes de entrar. */
+  serpienteId: string | null;
 }
 
 const conexiones = new Map<WebSocket, Conexion>();
@@ -96,13 +99,36 @@ function validarNombre(valor: unknown): string {
   return limpio.length > 0 ? limpio : "Anónimo";
 }
 
-// Cada tick, un único JSON para todos los clientes ya unidos.
-juego.iniciar((snapshot) => {
-  const texto = JSON.stringify(snapshot);
+/** Busca la conexión de una serpiente concreta. */
+function conexionDe(serpienteId: string): WebSocket | null {
   for (const [ws, conexion] of conexiones) {
-    if (conexion.id && ws.readyState === WebSocket.OPEN) ws.send(texto);
+    if (conexion.serpienteId === serpienteId) return ws;
   }
-});
+  return null;
+}
+
+// Cada tick, un único JSON para todos los clientes ya unidos.
+juego.iniciar(
+  (snapshot) => {
+    const texto = JSON.stringify(snapshot);
+    for (const [ws, conexion] of conexiones) {
+      if (conexion.entrado && ws.readyState === WebSocket.OPEN) ws.send(texto);
+    }
+  },
+  (serpienteId, puntuacion) => {
+    // La serpiente murió: el jugador deja de estar vivo y recibe su puntuación.
+    const ws = conexionDe(serpienteId);
+    if (!ws) return;
+
+    const conexion = conexiones.get(ws);
+    if (conexion) conexion.serpienteId = null;
+
+    if (ws.readyState === WebSocket.OPEN) {
+      const aviso: MensajeServidor = { t: "dead", puntuacion };
+      ws.send(JSON.stringify(aviso));
+    }
+  },
+);
 
 const wss = new WebSocketServer({ noServer: true });
 
@@ -119,7 +145,7 @@ servidor.on("upgrade", (req, socket, head) => {
 });
 
 wss.on("connection", (ws) => {
-  const conexion: Conexion = { id: null };
+  const conexion: Conexion = { entrado: false, serpienteId: null };
   conexiones.set(ws, conexion);
 
   ws.on("message", (datos) => {
@@ -133,14 +159,15 @@ wss.on("connection", (ws) => {
     }
 
     if (mensaje.t === "join") {
-      if (conexion.id) return; // ya estaba dentro
+      if (conexion.serpienteId) return; // ya tiene una serpiente viva
 
       const nombre = validarNombre(mensaje.nombre);
       const skin = esSkinValida(mensaje.skin) ? mensaje.skin : 0;
       const id = randomUUID();
 
       juego.agregarJugador(id, nombre, skin);
-      conexion.id = id;
+      conexion.serpienteId = id;
+      conexion.entrado = true;
 
       const bienvenida: MensajeServidor = {
         t: "welcome",
@@ -155,9 +182,9 @@ wss.on("connection", (ws) => {
     }
 
     if (mensaje.t === "input") {
-      if (!conexion.id) return; // todavía no ha entrado
+      if (!conexion.serpienteId) return; // todavía no ha entrado o está muerto
 
-      const serpiente = juego.obtener(conexion.id);
+      const serpiente = juego.obtener(conexion.serpienteId);
       if (!serpiente) return;
 
       // Validación: el ángulo tiene que ser un número real.
@@ -168,9 +195,9 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    if (conexion.id) {
-      juego.quitarJugador(conexion.id);
-      console.log(`[ws] salió ${conexion.id.slice(0, 8)}; en el mapa: ${juego.cantidadSerpientes}`);
+    if (conexion.serpienteId) {
+      juego.quitarJugador(conexion.serpienteId);
+      console.log(`[ws] salió ${conexion.serpienteId.slice(0, 8)}; en el mapa: ${juego.cantidadSerpientes}`);
     }
     conexiones.delete(ws);
   });

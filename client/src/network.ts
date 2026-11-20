@@ -11,7 +11,7 @@ import type {
   SerpienteVisible,
 } from "../../shared/protocol";
 
-export type EstadoConexion = "conectando" | "listo" | "cerrado";
+export type EstadoConexion = "conectando" | "listo" | "muerto" | "cerrado";
 
 interface SnapshotGuardado {
   /** Momento (performance.now) en que se recibió. */
@@ -32,6 +32,11 @@ export interface Red {
   miId: string | null;
   tickRate: number;
   radioMapa: number;
+  /** Nombre y skin elegidos, para poder reaparecer con los mismos. */
+  nombre: string;
+  skin: number;
+  /** Puntuación final de la última muerte. */
+  puntuacionFinal: number;
   /** Snapshots recientes, de más viejo a más nuevo. */
   buffer: SnapshotGuardado[];
   ultimoAngulo: number;
@@ -62,6 +67,9 @@ export function crearRed(nombre: string, skin: number): Red {
     miId: null,
     tickRate: 0,
     radioMapa: 0,
+    nombre,
+    skin,
+    puntuacionFinal: 0,
     buffer: [],
     ultimoAngulo: Number.NaN,
     ultimoAcelerando: false,
@@ -112,6 +120,14 @@ export function crearRed(nombre: string, skin: number): Red {
       // Conserva solo lo reciente: un segundo de snapshots y como mucho 30.
       while (red.buffer.length > 1 && red.buffer[0]!.recibido < ahora - 1000) red.buffer.shift();
       while (red.buffer.length > 30) red.buffer.shift();
+      return;
+    }
+
+    if (mensaje.t === "dead") {
+      red.estado = "muerto";
+      red.miId = null;
+      red.puntuacionFinal = mensaje.puntuacion;
+      console.log(`Has muerto. Puntuación: ${mensaje.puntuacion}`);
     }
   });
 
@@ -135,6 +151,14 @@ export function enviarInput(red: Red, angulo: number, acelerando: boolean): void
   red.ultimoAngulo = angulo;
   red.ultimoAcelerando = acelerando;
   enviar(red, { t: "input", angulo, acelerando });
+}
+
+/** Pide al servidor una serpiente nueva tras morir. */
+export function reaparecer(red: Red): void {
+  if (red.estado !== "muerto") return;
+  red.estado = "conectando";
+  red.ultimoAngulo = Number.NaN; // el próximo input se envía seguro
+  enviar(red, { t: "join", nombre: red.nombre, skin: red.skin });
 }
 
 /** Interpola los segmentos de una serpiente entre dos snapshots. */

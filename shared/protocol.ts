@@ -17,6 +17,8 @@ export interface ComidaVisible {
   id: number;
   x: number;
   y: number;
+  /** Cuánto alimenta esta comida (las de restos valen más). */
+  valor: number;
 }
 
 export interface EntradaRanking {

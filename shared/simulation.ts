@@ -6,6 +6,7 @@
 import {
   SEGMENT_SPACING,
   SNAKE_BASE_RADIUS,
+  SNAKE_MIN_BOOST_LENGTH,
   SNAKE_RADIUS_GROWTH,
   SNAKE_SPEED,
   SNAKE_START_LENGTH,
@@ -61,13 +62,13 @@ export function girarHacia(cuerpo: CuerpoSerpiente, anguloObjetivo: number, dt: 
   cuerpo.angulo = normalizarAngulo(cuerpo.angulo + giro);
 }
 
-/** Avanza la cabeza y recoloca el cuerpo en cadena. */
-export function avanzarSerpiente(cuerpo: CuerpoSerpiente, dt: number): void {
+/** Avanza la cabeza y recoloca el cuerpo en cadena. Devuelve los segmentos recortados. */
+export function avanzarSerpiente(cuerpo: CuerpoSerpiente, dt: number, velocidad = SNAKE_SPEED): Punto[] {
   const cabeza = cuerpo.segmentos[0];
-  if (!cabeza) return;
+  if (!cabeza) return [];
 
-  cabeza.x += Math.cos(cuerpo.angulo) * SNAKE_SPEED * dt;
-  cabeza.y += Math.sin(cuerpo.angulo) * SNAKE_SPEED * dt;
+  cabeza.x += Math.cos(cuerpo.angulo) * velocidad * dt;
+  cabeza.y += Math.sin(cuerpo.angulo) * velocidad * dt;
 
   // Cada segmento se coloca a distancia fija del anterior.
   for (let i = 1; i < cuerpo.segmentos.length; i++) {
@@ -89,20 +90,23 @@ export function avanzarSerpiente(cuerpo: CuerpoSerpiente, dt: number): void {
   if (ultimo && cuerpo.segmentos.length < cuerpo.longitudObjetivo) {
     cuerpo.segmentos.push({ x: ultimo.x, y: ultimo.y });
   }
+
+  // Recorta si la longitud objetivo bajó (al acelerar se consume longitud).
+  const maximo = Math.max(SNAKE_MIN_BOOST_LENGTH, Math.ceil(cuerpo.longitudObjetivo));
+  const eliminados: Punto[] = [];
+  while (cuerpo.segmentos.length > maximo) {
+    const quitado = cuerpo.segmentos.pop();
+    if (quitado) eliminados.push(quitado);
+  }
+
+  return eliminados;
 }
 
-/** Mantiene la cabeza dentro del mapa (provisional; en la Fase 3 el borde mata). */
-export function limitarAlMapa(cuerpo: CuerpoSerpiente): void {
+/** ¿La cabeza tocó el borde del mapa? (tocar el borde mata) */
+export function fueraDelMapa(cuerpo: CuerpoSerpiente): boolean {
   const cabeza = cuerpo.segmentos[0];
-  if (!cabeza) return;
-
-  const distancia = Math.hypot(cabeza.x, cabeza.y);
-  const limite = WORLD_RADIUS - radioSerpiente(cuerpo);
-  if (distancia > limite) {
-    const factor = limite / distancia;
-    cabeza.x *= factor;
-    cabeza.y *= factor;
-  }
+  if (!cabeza) return false;
+  return Math.hypot(cabeza.x, cabeza.y) >= WORLD_RADIUS - radioSerpiente(cuerpo);
 }
 
 /** Punto aleatorio dentro del círculo del mapa, dejando el margen indicado. */
