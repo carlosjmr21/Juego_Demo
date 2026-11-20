@@ -96,3 +96,18 @@ export const FOOD_PULSE_SPEED = 3;
 
 /** Distancia al borde a la que un bot empieza a volver hacia el centro (px). */
 export const BOT_BORDER_MARGIN = 260;
+
+/** Margen duro: los bots nunca apuntan más allá de `WORLD_RADIUS - esto` (px). */
+export const BOT_EDGE_MARGIN = 40;
+
+/** Radio en el que un bot busca comida (px). */
+export const BOT_FOOD_RANGE = 500;
+
+/** Cuánto se prefiere la comida que está por delante (px de ventaja). */
+export const BOT_FOOD_AHEAD_BONUS = 140;
+
+/** Alineación mínima (coseno) para perseguir una comida: no da media vuelta. */
+export const BOT_FOOD_MIN_ALIGNMENT = 0;
+
+/** Ángulos que prueba un bot, en orden, para encontrar un rumbo despejado (rad). */
+export const BOT_WHISKER_STEPS = [0.4, 0.8, 1.2, 1.6, 2.2];
