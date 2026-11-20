@@ -18,6 +18,18 @@ export const SNAKE_START_LENGTH = 10;
 /** Radio base del primer segmento (px). */
 export const SNAKE_BASE_RADIUS = 9;
 
+/** Separación entre los centros de dos segmentos consecutivos (px). */
+export const SEGMENT_SPACING = 8;
+
+/** Giro máximo de la cabeza hacia el objetivo (radianes por segundo). */
+export const SNAKE_TURN_RATE = 6;
+
+/** Cuántos segmentos gana la serpiente por cada comida. */
+export const FOOD_GROWTH = 1;
+
+/** Cuánto crece el radio por cada segmento de más (fracción del radio base). */
+export const SNAKE_RADIUS_GROWTH = 0.02;
+
 /** Velocidad normal de la serpiente (px por segundo). */
 export const SNAKE_SPEED = 150;
 
@@ -32,3 +44,9 @@ export const FOOD_RADIUS = 5;
 
 /** Radio del área de visión de cada jugador (px). */
 export const VIEW_RADIUS = 900;
+
+/** Lado de cada hexágono del fondo (px). */
+export const HEX_SIZE = 46;
+
+/** Cuánto tarda la cámara en alcanzar a la cabeza (menor = más pegada). */
+export const CAMERA_SMOOTHING = 0.0006;
