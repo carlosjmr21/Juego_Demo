@@ -75,7 +75,7 @@ Mensajes en JSON por ahora, tipados en `shared/protocol.ts` como uniones discrim
 
 ## Estilo visual
 
-- Fondo oscuro con cuadrícula hexagonal procedural; borde del mapa en rojo.
+- Fondo oscuro con cuadrícula hexagonal procedural; borde del mapa en violeta.
 - Cada segmento con degradado radial para dar volumen. Las skins con varios colores se alternan por segmento.
 - Ojos en la cabeza orientados según la dirección.
 - Brillo (`shadowBlur`) en el cuerpo al acelerar.
