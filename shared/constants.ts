@@ -73,3 +73,23 @@ export const DEATH_SEGMENTS_PER_FOOD = 2;
 
 /** Lado de cada celda de la cuadrícula espacial de colisiones (px). */
 export const SPATIAL_CELL_SIZE = 64;
+
+// --- Fase 5: optimización, arena con bots y pulido ------------------------
+
+/** Margen extra alrededor del área de visión que se envía en el snapshot (px). */
+export const SNAPSHOT_MARGIN = 300;
+
+/** Serpientes mínimas en el mapa (los bots rellenan hasta llegar a esta cifra). */
+export const MIN_SNAKES = 10;
+
+/** Tope de bots a la vez. */
+export const MAX_BOTS = 12;
+
+/** Distancia por delante que mira un bot para esquivar (px). */
+export const BOT_LOOKAHEAD = 70;
+
+/** Distancia a la que un bot considera que hay peligro (px). */
+export const BOT_AVOID_RADIUS = 95;
+
+/** Velocidad del pulso de brillo de la comida. */
+export const FOOD_PULSE_SPEED = 3;

@@ -107,12 +107,12 @@ function conexionDe(serpienteId: string): WebSocket | null {
   return null;
 }
 
-// Cada tick, un único JSON para todos los clientes ya unidos.
+// Cada tick se arma un snapshot por cliente, limitado a su área de visión.
 juego.iniciar(
-  (snapshot) => {
-    const texto = JSON.stringify(snapshot);
+  () => {
     for (const [ws, conexion] of conexiones) {
-      if (conexion.entrado && ws.readyState === WebSocket.OPEN) ws.send(texto);
+      if (!conexion.entrado || ws.readyState !== WebSocket.OPEN) continue;
+      ws.send(JSON.stringify(juego.snapshotPara(conexion.serpienteId)));
     }
   },
   (serpienteId, puntuacion) => {

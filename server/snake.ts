@@ -13,6 +13,8 @@ export interface SerpienteServidor extends CuerpoSerpiente {
   anguloObjetivo: number;
   /** Reservado para la Fase 3 (acelerar que consume longitud). */
   acelerando: boolean;
+  /** ¿La controla el servidor (bot) en vez de un jugador? */
+  esBot: boolean;
 }
 
 export function crearSerpiente(
@@ -21,6 +23,7 @@ export function crearSerpiente(
   skin: number,
   origen: Punto,
   angulo: number,
+  esBot = false,
 ): SerpienteServidor {
   const segmentos = crearSegmentosIniciales(origen, angulo);
   return {
@@ -30,6 +33,7 @@ export function crearSerpiente(
     angulo,
     anguloObjetivo: angulo,
     acelerando: false,
+    esBot,
     longitudObjetivo: segmentos.length,
     segmentos,
   };
@@ -41,12 +45,14 @@ export function aplicarInput(serpiente: SerpienteServidor, angulo: number, acele
   serpiente.acelerando = acelerando;
 }
 
-/** Convierte la serpiente a la forma que viaja en el snapshot. */
+/** Convierte la serpiente a la forma que viaja en el snapshot.
+ *  Redondea las coordenadas para que el JSON pese menos. */
 export function aVisible(serpiente: SerpienteServidor): SerpienteVisible {
   return {
     id: serpiente.id,
     nombre: serpiente.nombre,
     skin: serpiente.skin,
-    segmentos: serpiente.segmentos,
+    acelerando: serpiente.acelerando,
+    segmentos: serpiente.segmentos.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) })),
   };
 }

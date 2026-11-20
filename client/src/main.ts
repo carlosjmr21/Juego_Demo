@@ -91,16 +91,17 @@ function aMundo(snapshot: SnapshotInterpolado, miId: string | null): { serpiente
     segmentos: s.segmentos,
     skin: s.skin,
     esMia: s.id === miId,
+    acelerando: s.acelerando,
   }));
   const comida: ComidaDibujo[] = snapshot.comida.map((c) => ({ id: c.id, x: c.x, y: c.y, valor: c.valor }));
   return { serpientes, comida };
 }
 
 /** Prepara el canvas y devuelve la vista lista para dibujar. */
-function prepararVista(): Vista {
+function prepararVista(tiempoMs: number): Vista {
   const dpr = window.devicePixelRatio || 1;
   contexto.setTransform(dpr, 0, 0, dpr, 0, 0);
-  return { ctx: contexto, camara, ancho, alto };
+  return { ctx: contexto, camara, ancho, alto, tiempo: tiempoMs / 1000 };
 }
 
 /** Texto del marcador mientras se juega. */
@@ -121,7 +122,7 @@ function bucle(tiempo: number): void {
   const dt = Math.min((tiempo - ultimoTiempo) / 1000, 0.05);
   ultimoTiempo = tiempo;
 
-  const vista = prepararVista();
+  const vista = prepararVista(tiempo);
   const snapshot = red ? obtenerSnapshot(red, tiempo) : null;
 
   if (red && snapshot) {

@@ -1,5 +1,6 @@
 // Estado del mundo y bucle de tick. Todo lo que decide el juego vive aquí:
-// mover serpientes, comer, resolver colisiones y armar el snapshot.
+// mover serpientes (jugadores y bots), comer, resolver colisiones y armar el
+// snapshot que se envía a cada cliente según su área de visión.
 
 import {
   BOOST_LENGTH_COST,
@@ -8,14 +9,19 @@ import {
   FOOD_COUNT,
   FOOD_RADIUS,
   FOOD_VALUE,
+  MAX_BOTS,
+  MIN_SNAKES,
   SNAKE_BOOST_SPEED,
   SNAKE_MIN_BOOST_LENGTH,
   SNAKE_SPEED,
   SNAKE_START_LENGTH,
+  SNAPSHOT_MARGIN,
   SPATIAL_CELL_SIZE,
   TICK_MS,
+  VIEW_RADIUS,
 } from "../shared/constants.js";
 import type { ComidaVisible, EntradaRanking, MensajeServidor, Punto } from "../shared/protocol.js";
+import { SKINS } from "../shared/skins.js";
 import {
   avanzarSerpiente,
   fueraDelMapa,
@@ -23,6 +29,7 @@ import {
   puntoAleatorioEnMapa,
   radioSerpiente,
 } from "../shared/simulation.js";
+import { ControladorBots } from "./bots.js";
 import type { SerpienteServidor } from "./snake.js";
 import { aVisible, crearSerpiente } from "./snake.js";
 import { CuadriculaEspacial } from "./spatialGrid.js";
@@ -33,20 +40,26 @@ const DT = TICK_MS / 1000;
 /** Cuántos jugadores entran en el ranking. */
 const MAX_RANKING = 10;
 
-/** Recibe el snapshot de cada tick para repartirlo entre los clientes. */
-export type Difusor = (snapshot: MensajeServidor) => void;
-
+/** Se llama una vez por tick, después de simular. */
+export type AvisoTick = () => void;
 /** Avisa de que un jugador murió, con su puntuación final. */
 export type AvisoMuerte = (id: string, puntuacion: number) => void;
+
+/** Copia de la comida con las coordenadas redondeadas, para que el JSON pese menos. */
+function aComidaVisible(comida: ComidaVisible): ComidaVisible {
+  return { id: comida.id, x: Math.round(comida.x), y: Math.round(comida.y), valor: comida.valor };
+}
 
 export class Juego {
   private serpientes = new Map<string, SerpienteServidor>();
   private comida: ComidaVisible[] = [];
   private siguienteComidaId = 0;
+  private siguienteBot = 1;
   private temporizador: ReturnType<typeof setInterval> | null = null;
-  private difundir: Difusor | null = null;
+  private alTick: AvisoTick | null = null;
   private alMorir: AvisoMuerte | null = null;
   private cuadricula = new CuadriculaEspacial(SPATIAL_CELL_SIZE);
+  private bots = new ControladorBots();
 
   constructor() {
     for (let i = 0; i < FOOD_COUNT; i++) this.comida.push(this.nuevaComidaEnCirculo(FOOD_VALUE));
@@ -72,6 +85,32 @@ export class Juego {
     return serpiente;
   }
 
+  /** Añade un bot con nombre y skin de relleno. */
+  private agregarBot(): void {
+    const id = `bot-${this.siguienteBot}`;
+    this.siguienteBot++;
+    const nombre = `Bot ${this.siguienteBot - 1}`;
+    const skin = Math.floor(Math.random() * SKINS.length);
+    const origen = puntoAleatorioEnMapa(300);
+    const angulo = Math.random() * Math.PI * 2;
+    this.serpientes.set(id, crearSerpiente(id, nombre, skin, origen, angulo, true));
+  }
+
+  /** Mantiene el mapa con al menos MIN_SNAKES serpientes (jugadores + bots). */
+  private asegurarBots(): void {
+    let bots = this.contarBots();
+    while (this.serpientes.size < MIN_SNAKES && bots < MAX_BOTS) {
+      this.agregarBot();
+      bots++;
+    }
+  }
+
+  private contarBots(): number {
+    let n = 0;
+    for (const s of this.serpientes.values()) if (s.esBot) n++;
+    return n;
+  }
+
   quitarJugador(id: string): void {
     this.serpientes.delete(id);
   }
@@ -84,10 +123,11 @@ export class Juego {
     return this.serpientes.size;
   }
 
-  /** Arranca el tick fijo. `difundir` se llama una vez por tick con el snapshot. */
-  iniciar(difundir: Difusor, alMorir: AvisoMuerte): void {
-    this.difundir = difundir;
+  /** Arranca el tick fijo. `alTick` se llama una vez por tick, tras simular. */
+  iniciar(alTick: AvisoTick, alMorir: AvisoMuerte): void {
+    this.alTick = alTick;
     this.alMorir = alMorir;
+    this.asegurarBots();
     if (this.temporizador) return;
     this.temporizador = setInterval(() => this.tick(), TICK_MS);
   }
@@ -99,10 +139,33 @@ export class Juego {
 
   /** Un paso de simulación completo. */
   private tick(): void {
+    this.reconstruirCuadricula();
+    this.decidirBots();
     this.moverTodo();
     this.comerTodo();
     this.detectarMuertes();
-    this.difundir?.(this.snapshot());
+    this.asegurarBots();
+    this.alTick?.();
+  }
+
+  /** Reconstruye la cuadrícula espacial con todos los segmentos actuales. */
+  private reconstruirCuadricula(): void {
+    this.cuadricula.limpiar();
+    for (const serpiente of this.serpientes.values()) {
+      for (const segmento of serpiente.segmentos) {
+        this.cuadricula.insertar({ id: serpiente.id, punto: segmento });
+      }
+    }
+  }
+
+  /** Pide a cada bot su decisión y la aplica como si fuera un input. */
+  private decidirBots(): void {
+    for (const serpiente of this.serpientes.values()) {
+      if (!serpiente.esBot) continue;
+      const decision = this.bots.decidir(serpiente, this.comida, this.cuadricula);
+      serpiente.anguloObjetivo = decision.angulo;
+      serpiente.acelerando = decision.acelerando;
+    }
   }
 
   /** Gira cada serpiente hacia su input, la avanza y aplica el coste de acelerar. */
@@ -114,7 +177,6 @@ export class Juego {
       const velocidad = acelera ? SNAKE_BOOST_SPEED : SNAKE_SPEED;
 
       if (acelera) {
-        // Acelerar consume longitud; no se puede bajar del mínimo.
         serpiente.longitudObjetivo = Math.max(
           SNAKE_MIN_BOOST_LENGTH,
           serpiente.longitudObjetivo - BOOST_LENGTH_COST * DT,
@@ -137,7 +199,6 @@ export class Juego {
       let crecimiento = 0;
       const repuestas: ComidaVisible[] = [];
 
-      // Recorremos de atrás hacia delante porque podemos quitar elementos.
       for (let i = this.comida.length - 1; i >= 0; i--) {
         const trozo = this.comida[i];
         if (!trozo) continue;
@@ -158,13 +219,6 @@ export class Juego {
 
   /** Mata a las serpientes que chocaron contra otra o contra el borde. */
   private detectarMuertes(): void {
-    this.cuadricula.limpiar();
-    for (const serpiente of this.serpientes.values()) {
-      for (const segmento of serpiente.segmentos) {
-        this.cuadricula.insertar({ id: serpiente.id, punto: segmento });
-      }
-    }
-
     const muertas: SerpienteServidor[] = [];
 
     for (const serpiente of this.serpientes.values()) {
@@ -194,7 +248,7 @@ export class Juego {
     for (const serpiente of muertas) this.matar(serpiente);
   }
 
-  /** Convierte el cuerpo en comida, retira la serpiente y avisa al jugador. */
+  /** Convierte el cuerpo en comida, retira la serpiente y avisa si era un jugador. */
   private matar(serpiente: SerpienteServidor): void {
     if (!this.serpientes.has(serpiente.id)) return; // ya estaba muerta en este tick
 
@@ -204,6 +258,11 @@ export class Juego {
     for (let i = 0; i < serpiente.segmentos.length; i += paso) {
       const segmento = serpiente.segmentos[i];
       if (segmento) this.comida.push(this.nuevaComidaEn(segmento, DEATH_FOOD_VALUE));
+    }
+
+    if (serpiente.esBot) {
+      this.bots.olvidar(serpiente.id);
+      return;
     }
 
     const puntuacion = Math.max(0, serpiente.segmentos.length - SNAKE_START_LENGTH);
@@ -220,15 +279,35 @@ export class Juego {
   }
 
   /**
-   * Snapshot del estado. Por ahora va el mapa entero; en la Fase 5 se
-   * limitará al área de visión de cada jugador.
+   * Snapshot para un cliente: solo lo que está dentro de su área de visión
+   * (más un margen). Un cliente sin serpiente viva recibe el mapa completo.
    */
-  private snapshot(): MensajeServidor {
-    return {
-      t: "snapshot",
-      serpientes: [...this.serpientes.values()].map(aVisible),
-      comida: this.comida,
-      ranking: this.ranking(),
-    };
+  snapshotPara(serpienteId: string | null): MensajeServidor {
+    const ranking = this.ranking();
+    const yo = serpienteId ? this.serpientes.get(serpienteId) : undefined;
+    const cabeza = yo?.segmentos[0];
+
+    if (!cabeza) {
+      return {
+        t: "snapshot",
+        serpientes: [...this.serpientes.values()].map(aVisible),
+        comida: this.comida.map(aComidaVisible),
+        ranking,
+      };
+    }
+
+    const alcance = VIEW_RADIUS + SNAPSHOT_MARGIN;
+    const serpientes = [...this.serpientes.values()]
+      .filter((s) => {
+        const c = s.segmentos[0];
+        return c ? Math.hypot(c.x - cabeza.x, c.y - cabeza.y) <= alcance : false;
+      })
+      .map(aVisible);
+
+    const comida = this.comida
+      .filter((c) => Math.hypot(c.x - cabeza.x, c.y - cabeza.y) <= alcance)
+      .map(aComidaVisible);
+
+    return { t: "snapshot", serpientes, comida, ranking };
   }
 }

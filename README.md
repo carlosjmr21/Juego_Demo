@@ -70,7 +70,7 @@ Proyecto en construcción, organizado en fases:
 - [x] Fase 1 — Una serpiente jugable en local
 - [x] Fase 2 — Lógica de movimiento y comida en el servidor
 - [x] Fase 3 — Colisiones, muerte y aceleración
-- [ ] Fase 4 — Interfaz: menú, ranking y skins
+- [x] Fase 4 — Interfaz: menú, ranking y skins
 - [ ] Fase 5 — Optimización, área de visión y bots
 - [ ] Fase 6 — Deploy final y pruebas
 

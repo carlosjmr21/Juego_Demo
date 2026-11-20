@@ -11,6 +11,8 @@ export interface SerpienteVisible {
   nombre: string;
   skin: number;
   segmentos: Punto[];
+  /** ¿Está acelerando? El cliente lo usa para el brillo. */
+  acelerando: boolean;
 }
 
 export interface ComidaVisible {

@@ -1,4 +1,4 @@
-import { FOOD_RADIUS, HEX_SIZE, WORLD_RADIUS } from "../../shared/constants";
+import { FOOD_PULSE_SPEED, FOOD_RADIUS, HEX_SIZE, WORLD_RADIUS } from "../../shared/constants";
 import type { Punto } from "../../shared/protocol";
 import { radioPorLongitud } from "../../shared/simulation";
 import { obtenerSkin } from "../../shared/skins";
@@ -18,6 +18,8 @@ export interface Vista {
   camara: Camara;
   ancho: number;
   alto: number;
+  /** Tiempo en segundos, para animar el pulso de la comida. */
+  tiempo: number;
 }
 
 /** Una serpiente lista para dibujar (ya interpolada por la red). */
@@ -28,6 +30,8 @@ export interface SerpienteDibujo {
   skin: number;
   /** ¿Es la serpiente del jugador? (se resalta su nombre) */
   esMia: boolean;
+  /** ¿Está acelerando? (se le pone brillo) */
+  acelerando: boolean;
 }
 
 export interface ComidaDibujo {
@@ -139,12 +143,15 @@ export function dibujarComida(vista: Vista, comida: ComidaDibujo[]): void {
     }
 
     const color = colorComida(punto.id);
-    const radio = FOOD_RADIUS * (1 + Math.max(0, punto.valor - 1) * 0.4);
+    const valor = Math.max(0, punto.valor - 1);
+    // Pulso de brillo: cada comida late con su propio desfase.
+    const pulso = 0.5 + 0.5 * Math.sin(vista.tiempo * FOOD_PULSE_SPEED + punto.id * 0.7);
+    const radio = FOOD_RADIUS * (1 + valor * 0.4) * (0.88 + 0.24 * pulso);
 
     ctx.save();
     ctx.fillStyle = color;
     ctx.shadowColor = color;
-    ctx.shadowBlur = 12 + Math.max(0, punto.valor - 1) * 6;
+    ctx.shadowBlur = 8 + pulso * 8 + valor * 6;
     ctx.beginPath();
     ctx.arc(pantalla.x, pantalla.y, radio, 0, Math.PI * 2);
     ctx.fill();
@@ -159,6 +166,13 @@ export function dibujarSerpiente(vista: Vista, serpiente: SerpienteDibujo): void
   const radio = radioPorLongitud(serpiente.segmentos.length);
   const angulo = anguloDe(serpiente.segmentos);
 
+  // Con aceleración, el cuerpo brilla.
+  const conBrillo = serpiente.acelerando;
+  if (conBrillo) {
+    ctx.save();
+    ctx.shadowBlur = 18;
+  }
+
   // Del final hacia la cabeza para que la cabeza quede encima.
   for (let i = serpiente.segmentos.length - 1; i >= 0; i--) {
     const segmento = serpiente.segmentos[i];
@@ -167,11 +181,13 @@ export function dibujarSerpiente(vista: Vista, serpiente: SerpienteDibujo): void
     const pantalla = mundoAPantalla(camara, ancho, alto, segmento);
     const color = skin[i % skin.length] ?? skin[0] ?? "#4ade80";
 
+    if (conBrillo) ctx.shadowColor = color;
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(pantalla.x, pantalla.y, radio, 0, Math.PI * 2);
     ctx.fill();
 
+    if (conBrillo) ctx.shadowColor = "transparent";
     // Luz radial para dar volumen.
     const brillo = ctx.createRadialGradient(
       pantalla.x - radio * 0.3,
@@ -188,6 +204,8 @@ export function dibujarSerpiente(vista: Vista, serpiente: SerpienteDibujo): void
     ctx.arc(pantalla.x, pantalla.y, radio, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  if (conBrillo) ctx.restore();
 
   dibujarOjos(vista, serpiente.segmentos[0], angulo, radio);
   dibujarNombre(vista, serpiente, radio);
@@ -247,11 +265,28 @@ function dibujarOjos(vista: Vista, cabeza: Punto | undefined, angulo: number, ra
   }
 }
 
+/** ¿Alguna parte de la serpiente cae dentro de la pantalla? */
+function serpienteEnPantalla(serpiente: SerpienteDibujo, vista: Vista): boolean {
+  const { camara, ancho, alto } = vista;
+  const margen = 100;
+  const izq = camara.x - ancho / 2 - margen;
+  const der = camara.x + ancho / 2 + margen;
+  const arriba = camara.y - alto / 2 - margen;
+  const abajo = camara.y + alto / 2 + margen;
+
+  for (const punto of serpiente.segmentos) {
+    if (punto.x >= izq && punto.x <= der && punto.y >= arriba && punto.y <= abajo) return true;
+  }
+  return false;
+}
+
 /** Dibuja el mundo completo en el orden correcto. */
 export function dibujarMundo(vista: Vista, mundo: Mundo): void {
   limpiar(vista.ctx, vista.ancho, vista.alto);
   dibujarCuadricula(vista);
   dibujarBorde(vista);
   dibujarComida(vista, mundo.comida);
-  for (const serpiente of mundo.serpientes) dibujarSerpiente(vista, serpiente);
+  for (const serpiente of mundo.serpientes) {
+    if (serpienteEnPantalla(serpiente, vista)) dibujarSerpiente(vista, serpiente);
+  }
 }
